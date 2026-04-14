@@ -627,3 +627,7 @@ PHP_Laravel12_Analytics
 
 
 Your **PHP_Laravel12_Analytics** is now complete.
+<<<<<<< HEAD
+=======
+
+>>>>>>> development
