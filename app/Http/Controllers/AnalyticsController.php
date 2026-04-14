@@ -2,36 +2,84 @@
 
 namespace App\Http\Controllers;
 
-use Spatie\Analytics\Facades\Analytics;
-use Spatie\Analytics\Period;
+use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AnalyticsController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $period = Period::days(7);
+        // Date filter
+        $days = $request->days ?? 7;
 
-        // Fetch data
-        $rawVisitors = Analytics::fetchTotalVisitorsAndPageViews($period);
-        $rawTopPages = Analytics::fetchMostVisitedPages($period);
+        // Generate demo date range data (SAFE - NO Google API)
+        $visitors = collect();
 
-        // Ensure $visitors is always an array with 'date', 'visitors', 'pageViews'
-        $visitors = $rawVisitors->map(function ($item) {
-            return [
-                'date' => $item['date'] ?? 'N/A',
-                'visitors' => $item['visitors'] ?? 0,
-                'pageViews' => $item['pageViews'] ?? 0,
-            ];
-        })->toArray();
+        for ($i = $days - 1; $i >= 0; $i--) {
+            $visitors->push([
+                'date' => now()->subDays($i)->format('Y-m-d'),
+                'visitors' => rand(10, 100),
+                'pageViews' => rand(50, 200),
+            ]);
+        }
 
-        // Ensure $topPages is always an array with 'url' and 'pageViews'
-        $topPages = $rawTopPages->map(function ($item) {
-            return [
-                'url' => $item['url'] ?? 'N/A',
-                'pageViews' => $item['pageViews'] ?? 0,
-            ];
-        })->toArray();
+        // Top pages demo data
+        $topPages = collect([
+            ['url' => '/home', 'pageViews' => 120],
+            ['url' => '/about', 'pageViews' => 80],
+            ['url' => '/contact', 'pageViews' => 60],
+            ['url' => '/products', 'pageViews' => 150],
+        ]);
 
-        return view('analytics.dashboard', compact('visitors', 'topPages'));
+        // Search filter
+        if ($request->search) {
+            $topPages = $topPages->filter(function ($item) use ($request) {
+                return str_contains(
+                    strtolower($item['url']),
+                    strtolower($request->search)
+                );
+            })->values();
+        }
+
+        return view('analytics.dashboard', [
+            'visitors' => $visitors,
+            'topPages' => $topPages,
+            'request' => $request
+        ]);
+    }
+
+    // CSV Export
+    public function export()
+    {
+        $visitors = collect();
+
+        for ($i = 6; $i >= 0; $i--) {
+            $visitors->push([
+                'date' => now()->subDays($i)->format('Y-m-d'),
+                'visitors' => rand(10, 100),
+                'pageViews' => rand(50, 200),
+            ]);
+        }
+
+        $response = new StreamedResponse(function () use ($visitors) {
+            $handle = fopen('php://output', 'w');
+
+            fputcsv($handle, ['Date', 'Visitors', 'Page Views']);
+
+            foreach ($visitors as $row) {
+                fputcsv($handle, [
+                    $row['date'],
+                    $row['visitors'],
+                    $row['pageViews']
+                ]);
+            }
+
+            fclose($handle);
+        });
+
+        $response->headers->set('Content-Type', 'text/csv');
+        $response->headers->set('Content-Disposition', 'attachment; filename="analytics.csv"');
+
+        return $response;
     }
 }
